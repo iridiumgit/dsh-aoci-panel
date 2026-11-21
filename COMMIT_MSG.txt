@@ -1,0 +1,31 @@
+fix(macos): resolve aoci binary on macOS and include nested scanRoots repos
+
+Three independent defects made the panel unusable on macOS:
+
+1. Binary detection only matched *.exe, so a Homebrew-installed
+   /opt/homebrew/bin/aoci (no extension) was never discovered. Add
+   isAociBinaryName() and match the bare name too.
+
+2. userHome() read USERPROFILE only. On macOS that is empty, so the patch
+   target resolved to a non-existent path and the repo showed NOT_BOUND
+   even with a correct row. Fall back to HOME.
+
+3. profilePatchTargets() tested entry.type !== 'dir', but the DSH fs
+   service reports 'directory'. The condition never matched, so every
+   profile patch file was skipped and only the (non-existent) home patch
+   was considered. Accept 'directory'.
+
+Additionally, every action endpoint read body.bin directly. The client
+never populated bin from /aoci-panel/state, so all requests carried
+bin:"" and the server answered "no aoci executable specified".
+
+- client.js: applyState() seeds bin from res.bin when state is empty.
+- index.js: add resolveBin() falling back to settings.binPath then
+  discoverBins(settings.binDir). Used in runInstall, runFixBinding,
+  runAction and runVerify.
+
+Finally, buildWorkspaces() read only workspaceRegistry, so a repo indexed
+under scanRoots but never opened in DSH was invisible and displayed as
+uninitialised. Merge discoverWorkspaces results, deriving roots from
+registered parents when settings.scanRoots is not injected, and walk one
+level deeper because discovery only scans direct children.
